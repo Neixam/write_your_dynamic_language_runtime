@@ -12,8 +12,7 @@ import static fr.umlv.smalljs.stackinterp.Instructions.POP;
 import static fr.umlv.smalljs.stackinterp.Instructions.REGISTER;
 import static fr.umlv.smalljs.stackinterp.Instructions.RET;
 import static fr.umlv.smalljs.stackinterp.Instructions.*;
-import static fr.umlv.smalljs.stackinterp.TagValues.encodeDictObject;
-import static fr.umlv.smalljs.stackinterp.TagValues.encodeSmallInt;
+import static fr.umlv.smalljs.stackinterp.TagValues.*;
 
 import java.util.Arrays;
 import java.util.List;
@@ -160,134 +159,123 @@ public class InstrRewriter {
 				}
 			}
 			case Literal<?>(Object literalValue, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Literal");
 				// test if the literal value is a positive integers
-				//if (literalValue instanceof Integer value && value >= 0) {
-				// emit a small int
-				//buffer.emit(...).emit(...);
-				//} else {
-				// emit a dictionary object
-				//buffer.emit(...).emit(...);
-				//}
+				if (literalValue instanceof Integer value && value >= 0) {
+					// emit a small int
+					buffer.emit(CONST).emit(encodeSmallInt(value));
+				} else {
+					// emit a dictionary object
+					buffer.emit(CONST).emit(encodeDictObject(literalValue, dict));
+				}
 			}
 			case FunCall(Expr qualifier, List<Expr> args, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO FunCall");
 				// visit the qualifier
-				//visit(...);
+				visit(qualifier, env, buffer, dict, globalEnv);
 				// emit undefined
-				//buffer.emit(...).emit(...)
+				buffer.emit(CONST).emit(encodeDictObject(UNDEFINED, dict));
 				// visit all arguments
-				//for (var arg : funCall.args()) {
-				//	visit(...);
-				//}
+				for (var arg : args) {
+					visit(arg, env, buffer, dict, globalEnv);
+				}
 				// emit the funcall
-				//buffer.emit(...).emit(...);
+				buffer.emit(FUNCALL).emit(args.size());
 			}
 			case LocalVarAccess(String name, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO LocalVarAccess");
 				// get the local variable name
-				//var name = ...
 				// find if there is a local variable in the environment with the name
-				//var slotOrUndefined = env.lookup(...);
-				//if (slotOrUndefined == UNDEFINED) {
-				// emit a lookup with the name
-				//buffer.emit(...).emit(...);
-				//} else {
+				var slotOrUndefined = env.lookup(name);
+				if (slotOrUndefined == UNDEFINED) {
+					// emit a lookup with the name
+					buffer.emit(LOOKUP).emit(encodeAnyValue(name, dict));
+				} else {
 				// load the local variable with the slot
-				//buffer.emit(...).emit(...);
-				//}
+					buffer.emit(LOAD).emit((Integer) slotOrUndefined);
+				}
 			}
 			case LocalVarAssignment(String name, Expr expr, boolean declaration, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO LocalVarAssignment");
 				// visit the expression
-				// visit(...);
+				visit(expr, env, buffer, dict, globalEnv);
 				// find if there is a local variable in the env from the name
-				//var slotOrUndefined = env.lookup(...);
-				//if (slotOrUndefined == UNDEFINED) {
-				//	throw new Failure("unknown local variable " + name);
-				//}
+				var slotOrUndefined = env.lookup(name);
+				if (slotOrUndefined == UNDEFINED) {
+					throw new Failure("unknown local variable " + name);
+				}
 				// emit a store at the variable slot
-				//buffer.emit(...).emit(...);
+				buffer.emit(STORE).emit((int) slotOrUndefined);
 			}
 			case Fun(Optional<String> optName, List<String> parameters, Block body, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Fun");
 				// create a JSObject function
-				///var function = createFunction(optName, parameters, body, dict, globalEnv);
+				var function = createFunction(optName, parameters, body, dict, globalEnv);
 				// emit a const on the function
-				//buffer.emit(...).emit(...);
+				buffer.emit(CONST).emit(encodeDictObject(function, dict));
 				// if the name is present emit a code to register the function in the global environment
-				//fun.name().ifPresent(name -> {
-				//buffer.emit(DUP);
-				//buffer.emit(...).emit(...);
-				//});
+				optName.ifPresent(name -> {
+					buffer.emit(DUP);
+					buffer.emit(REGISTER).emit(encodeDictObject(name, dict));
+				});
 			}
 			case Return(Expr expr, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO Return");
 				// emit a visit of the expression
-				//visit(...);
+				visit(expr, env, buffer, dict, globalEnv);
 				// emit a RET
+				buffer.emit(RET);
 			}
 			case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO If");
 				// visit the condition
-				//visit(...);
+				visit(condition, env, buffer, dict, globalEnv);
 				// emit a JUMP_IF_FALSE and a placeholder
-				//var falsePlaceHolder = buffer.emit(JUMP_IF_FALSE).placeholder();
+				var falsePlaceHolder = buffer.emit(JUMP_IF_FALSE).placeholder();
 				// visit the true block
-				//visit(...);
+				visit(trueBlock, env, buffer, dict, globalEnv);
 				// emit a goto with another placeholder
-				//var endPlaceHolder = buffer.emit(GOTO).placeholder();
+				var endPlaceHolder = buffer.emit(GOTO).placeholder();
 				// patch the first placeholder
-				//buffer.patch(..., buffer.label());
+				buffer.patch(falsePlaceHolder, buffer.label());
 				// visit the false block
-				//visit(...);
+				visit(falseBlock, env, buffer, dict, globalEnv);
 				// patch the second placeholder
-				//buffer.patch(..., buffer.label());
+				buffer.patch(endPlaceHolder, buffer.label());
 			}
 			case New(Map<String, Expr> initMap, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO New");
 				// create a JSObject class
-				//var clazz = JSObject.newObject(null);
+				var clazz = JSObject.newObject(null);
 				// loop over all the field initializations
-				//initMap().forEach((fieldName, expr) -> {
+				initMap.forEach((fieldName, expr) -> {
 				//  register the field name with the right slot
-				//  clazz.register(...);
+					clazz.register(fieldName, clazz.length());
 				//   visit the initialization expression
-				//  visit(...);
-				//});
+					visit(expr, env, buffer, dict, globalEnv);
+				});
 				// emit a NEW with the class
-				//buffer.emit(...).emit(...);
+				buffer.emit(NEW).emit(encodeDictObject(clazz, dict));
 			}
 			case FieldAccess(Expr receiver, String name, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO FieldAccess");
 				// visit the receiver
-				//visit(...);
+				visit(receiver, env, buffer, dict, globalEnv);
 				// emit a GET with the field name
-				//buffer.emit(...).emit(...);
+				buffer.emit(GET).emit(encodeDictObject(name, dict));
 			}
 			case FieldAssignment(Expr receiver, String name, Expr expr, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO FieldAssignment");
 				// visit the receiver
-				//visit(...);
+				visit(receiver, env, buffer, dict, globalEnv);
 				// visit the expression
-				//visit(...);
+				visit(expr, env, buffer, dict, globalEnv);
 				// emit a PUT with the field name
-				//buffer.emit(...).emit(...);
+				buffer.emit(PUT).emit(encodeDictObject(name, dict));
 			}
 			case MethodCall(Expr receiver, String name, List<Expr> args, int lineNumber) -> {
-				throw new UnsupportedOperationException("TODO MethodCall");
 				// visit the receiver
-				//visit(...);
+				visit(receiver, env, buffer, dict, globalEnv);
 				// emit a DUP, get the field name and emit a SWAP of the qualifier and the receiver
-				//buffer.emit(DUP);
-				//buffer.emit(...).emit(...);
-				//buffer.emit(SWAP);
+				buffer.emit(DUP);
+				buffer.emit(GET).emit(encodeDictObject(name, dict));
+				buffer.emit(SWAP);
 				// visit all arguments
-				//for (var arg : args) {
-				  //visit(...);
-				//}
+				for (var arg : args) {
+				  visit(arg, env, buffer, dict, globalEnv);
+				}
 				// emit the funcall
-				//buffer.emit(...).emit(...);
+				buffer.emit(FUNCALL).emit(args.size());
 			}
 		}
 	}
